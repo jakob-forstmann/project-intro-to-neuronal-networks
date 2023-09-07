@@ -259,3 +259,45 @@ class TransformerEncoder(Encoder):
                 f"alpha={self.layers[0].alpha}, "
                 f'layer_norm="{self.layers[0]._layer_norm_position}", '
                 f"activation={self.layers[0].feed_forward.pwff_layer[1]})")
+
+class CNNEncoder(Encoder):
+    """ implements the Encoder from Convolutional Sequence to Sequence Learning"""
+    def __init__(self,
+                kernel_width:int=3,
+                hidden_size:int=512,
+                num_layers:int=1,
+                dropout:float = 0.1,
+                embd_dropout:float=0.2):
+        """
+        initialize the CNN Encoder 
+        :param kernel_width: number of input elements to a individual kernel 
+        :param num_layers: number of layers each layer contains of a 1D convolutional 
+        followed by a GLU  
+        """
+        super().__init__()
+        self.kernel_width = kernel_width
+        self.num_layers = num_layers
+        self.hidden_size = hidden_size
+        self.pse = PositionalEncoding(hidden_size)
+        # create num_layers layers each constisting of a 1D CNN
+        self.layer = nn.ModuleList([])
+        self._build_layers()
+    
+    def forward(self,src_embed: Tensor,):
+        conv_input = self.pse(src_embed)
+        for layer in self.layer:
+            layer()
+            
+    def _build_layers(self):
+        for _ in range(self.num_layers):
+            self.layers.append(
+            TransformerEncoderLayer(
+                size=hidden_size,
+                ff_size=ff_size,
+                num_heads=num_heads,
+                dropout=dropout,
+                alpha=kwargs.get("alpha", 1.0),
+                layer_norm=kwargs.get("layer_norm", "pre"),
+                activation=kwargs.get("activation", "relu"),
+            ))
+    

@@ -13,7 +13,7 @@ from torch import Tensor, nn
 
 from joeynmt.decoders import Decoder, RecurrentDecoder, TransformerDecoder
 from joeynmt.embeddings import Embeddings
-from joeynmt.encoders import Encoder, RecurrentEncoder, TransformerEncoder
+from joeynmt.encoders import Encoder, RecurrentEncoder, TransformerEncoder,CNNEncoder
 from joeynmt.helpers import ConfigurationError
 from joeynmt.initialization import initialize_model
 from joeynmt.loss import XentLoss
@@ -308,6 +308,10 @@ def build_model(cfg: dict = None,
             emb_dropout=enc_emb_dropout,
             pad_index=src_pad_index,
         )
+    if enc_cfg.get("type","recurrent") == "convolutional":
+        emd_dim = src_embed.embedding_dim
+        kernel_width = enc_cfg.get["kernel_width"]
+        encoder = CNNEncoder(**enc_cfg,kernel_width=kernel_width,emb_dim=emd_dim)
     else:
         encoder = RecurrentEncoder(
             **enc_cfg,
