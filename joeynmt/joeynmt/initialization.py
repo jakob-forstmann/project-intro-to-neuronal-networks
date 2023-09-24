@@ -130,6 +130,8 @@ def initialize_model(model: nn.Module, cfg: dict, src_padding_idx: int,
     bias_init = cfg.get("bias_initializer", "zeros")
     bias_init_weight = float(cfg.get("bias_init_weight", 0.01))
 
+    linear_init = cfg.get("linear_initializer","normal")
+    linear_init_weight = cfg.get("linear_init_weight",0)
     if (init == "xavier_normal"
             and cfg["encoder"]["type"] == cfg["decoder"]["type"] == "transformer"):
         # apply `alpha`: weight factor for residual connection
@@ -165,13 +167,14 @@ def initialize_model(model: nn.Module, cfg: dict, src_padding_idx: int,
     init_fn_ = _parse_init(init, init_weight, gain)
     embed_init_fn_ = _parse_init(embed_init, embed_init_weight, embed_gain)
     bias_init_fn_ = _parse_init(bias_init, bias_init_weight, gain)
-
+    linear_init_fn_ = _parse_init(linear_init,linear_init_weight,gain)
+    conv_linear_layers_name = ["map_to_conv_dim","map_residual_to_output"]
     with torch.no_grad():
         for name, p in model.named_parameters():
-
             if "embed" in name:
                 embed_init_fn_(p)
-
+            elif name in conv_linear_layers_name:
+                linear_init_fn_(p)
             elif "bias" in name:
                 bias_init_fn_(p)
 

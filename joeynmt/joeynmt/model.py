@@ -308,10 +308,11 @@ def build_model(cfg: dict = None,
             emb_dropout=enc_emb_dropout,
             pad_index=src_pad_index,
         )
-    if enc_cfg.get("type","recurrent") == "convolutional":
+    elif enc_cfg.get("type","recurrent") == "convolutional":
         emd_dim = src_embed.embedding_dim
-        kernel_width = enc_cfg.get["kernel_width"]
-        encoder = CNNEncoder(**enc_cfg,kernel_width=kernel_width,emb_dim=emd_dim)
+        enc_emb_dropout = enc_cfg["embeddings"].get("dropout", enc_dropout)
+        layers = enc_cfg.get("layers",{"output_channels":512,"kernel_width":3,"residual":True})
+        encoder = CNNEncoder(**enc_cfg,emb_size=emb_size,layers=layers,emb_dim=emd_dim)
     else:
         encoder = RecurrentEncoder(
             **enc_cfg,

@@ -3,14 +3,15 @@
 Various encoders
 """
 from typing import Tuple
-
+from math import sqrt
 import torch
 from torch import Tensor, nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from torch.nn.utils import weight_norm
 
 from joeynmt.helpers import freeze_params
 from joeynmt.transformer_layers import PositionalEncoding, TransformerEncoderLayer
-
+from joeynmt.cnn_layers import CNNEncoderLayer
 
 class Encoder(nn.Module):
     """
@@ -262,42 +263,64 @@ class TransformerEncoder(Encoder):
 
 class CNNEncoder(Encoder):
     """ implements the Encoder from Convolutional Sequence to Sequence Learning"""
-    def __init__(self,
-                kernel_width:int=3,
-                hidden_size:int=512,
+    def __init__(self, 
+                emb_size:int,
                 num_layers:int=1,
+                layers:dict[str,dict[str,int]]={"layer 1": {"output_channels":512,"kernel_width":3,"residual":True}},
                 dropout:float = 0.1,
-                embd_dropout:float=0.2):
+                emb_dropout:float=0.1,):
         """
         initialize the CNN Encoder 
-        :param kernel_width: number of input elements to a individual kernel 
-        :param num_layers: number of layers each layer contains of a 1D convolutional 
-        followed by a GLU  
+        :param num_layers: number of layers each layer contains of a 1D convolutional followed by a GLU  
+        :param layers: a dict of layer name(just for convience) and the layers output_channels,kernel_width 
+        and wether a residual connection should be used 
+        :param dropout probality for dropout 
         """
         super().__init__()
-        self.kernel_width = kernel_width
         self.num_layers = num_layers
-        self.hidden_size = hidden_size
-        self.pse = PositionalEncoding(hidden_size)
-        # create num_layers layers each constisting of a 1D CNN
-        self.layer = nn.ModuleList([])
+        self.layers = layers
+        self.convs:list[dict[str,int]] = [*self.layers.values()]
+        if len(self.layers)!=self.num_layers:
+                self._use_default_settings()
+        self.emb_size = emb_size
+        self.conv_layers= nn.ModuleList([])
+        self.input_size = self.convs[0]["output_channels"]
+        self.pse = PositionalEncoding(self.input_size)
+        self.emb_dropout = nn.Dropout(p=emb_dropout)
+        self.dropout = dropout
+        # project to embedding dim so the attention mechanism can be applied
+        out_channels = self.convs[-1]["output_channels"]
+        self.map_to_emb_dim = weight_norm(nn.Linear(out_channels,self.emb_size))
         self._build_layers()
-    
-    def forward(self,src_embed: Tensor,):
-        conv_input = self.pse(src_embed)
-        for layer in self.layer:
-            layer()
-            
-    def _build_layers(self):
-        for _ in range(self.num_layers):
-            self.layers.append(
-            TransformerEncoderLayer(
-                size=hidden_size,
-                ff_size=ff_size,
-                num_heads=num_heads,
-                dropout=dropout,
-                alpha=kwargs.get("alpha", 1.0),
-                layer_norm=kwargs.get("layer_norm", "pre"),
-                activation=kwargs.get("activation", "relu"),
-            ))
-    
+
+    def forward(self,src_embed: Tensor):
+        """
+        pass the embedded input tensor to each layer of the CNN Encoder
+        Each Layer consists of an 1D Convolutional followed by a GLU 
+        :param src_embed (batch x src_len x embed_size)
+        """
+        x = self.pse(src_embed) # add positional encoding
+        x = self.emb_dropout(x)
+        for layer in self.conv_layers:
+            x = layer(src_embed)
+        x = self.map_to_emb_dim(x) 
+        # for attention add current embedded element to the output of the last encoder layer
+        # and scale by 0.5 as proposed by the paper
+        x = (x+src_embed) * sqrt(0.5)
+        return x
+
+    def _build_layers(self):       
+        for conv in self.convs:
+            self.conv_layers.append(CNNEncoderLayer(
+                                    self.emb_size,self.input_size,
+                                    conv["output_channels"],
+                                    conv["kernel_width"],
+                                    conv["residual"],
+                                    dropout=self.dropout))
+
+    def _use_default_settings(self):
+        """ fills convs with values up to num_layers with the standard values 
+        convs now contains num_layers many entries with the values for each layer"""    
+        self.convs = self.convs + [ {"output_channels":512,"kernel_width":3,"residual":True} 
+                     for i in range((len(self.layers)),self.num_layers)]
+
