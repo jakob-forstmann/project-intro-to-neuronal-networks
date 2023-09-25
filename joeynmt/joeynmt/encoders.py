@@ -282,15 +282,15 @@ class CNNEncoder(Encoder):
         self.convs:list[dict[str,int]] = [*self.layers.values()]
         if len(self.layers)!=self.num_layers:
                 self._use_default_settings()
+        self.in_channels_first_layer = self.convs[0]["output_channels"]
+        out_channel_last_layer = self.convs[-1]["output_channels"]
         self.emb_size = emb_size
-        self.conv_layers= nn.ModuleList([])
-        self.in_channels = self.convs[0]["output_channels"]
-        self.pse = PositionalEncoding(self.in_channels)
+        self.pse = PositionalEncoding(self.in_channels_first_layer)
         self.emb_dropout = nn.Dropout(p=emb_dropout)
-        self.map_to_conv_dim = weight_norm(nn.Linear(self.emb_size,self.in_channels))
         self.dropout = dropout
-        out_channels = self.convs[-1]["output_channels"]
-        self.map_to_emb_dim = weight_norm(nn.Linear(out_channels,self.emb_size))
+        self.map_to_conv_dim = weight_norm(nn.Linear(self.emb_size,self.in_channels_first_layer))
+        self.map_to_emb_dim = weight_norm(nn.Linear(out_channel_last_layer,self.emb_size))
+        self.conv_layers= nn.ModuleList([])
         self._build_layers()
 
     def forward(self,src_embed: Tensor):
@@ -320,14 +320,16 @@ class CNNEncoder(Encoder):
         return (x,attention_values)
 
     def _build_layers(self):       
+        in_channels = self.in_channels_first_layer
         for conv in self.convs:
-            in_channels = conv["output_channels"]
             self.conv_layers.append(CNNEncoderLayer(
                                     self.emb_size,in_channels,
                                     conv["output_channels"],
                                     conv["kernel_width"],
                                     conv["residual"],
-                                    dropout=self.dropout))
+                                    self.padding,
+                                    self.dropout))
+            in_channels = conv["output_channels"]
 
     def _use_default_settings(self):
         """ fills convs with values up to num_layers with the standard values 
@@ -335,3 +337,4 @@ class CNNEncoder(Encoder):
         self.convs = self.convs + [ {"output_channels":512,"kernel_width":3,"residual":True} 
                      for i in range((len(self.layers)),self.num_layers)]
 
+   
