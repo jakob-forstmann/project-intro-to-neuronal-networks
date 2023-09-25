@@ -284,11 +284,11 @@ class CNNEncoder(Encoder):
                 self._use_default_settings()
         self.emb_size = emb_size
         self.conv_layers= nn.ModuleList([])
-        self.input_size = self.convs[0]["output_channels"]
-        self.pse = PositionalEncoding(self.input_size)
+        self.in_channels = self.convs[0]["output_channels"]
+        self.pse = PositionalEncoding(self.in_channels)
         self.emb_dropout = nn.Dropout(p=emb_dropout)
+        self.map_to_conv_dim = weight_norm(nn.Linear(self.emb_size,self.in_channels))
         self.dropout = dropout
-        # project to embedding dim so the attention mechanism can be applied
         out_channels = self.convs[-1]["output_channels"]
         self.map_to_emb_dim = weight_norm(nn.Linear(out_channels,self.emb_size))
         self._build_layers()
@@ -298,21 +298,32 @@ class CNNEncoder(Encoder):
         pass the embedded input tensor to each layer of the CNN Encoder
         Each Layer consists of an 1D Convolutional followed by a GLU 
         :param src_embed (batch x src_len x embed_size)
+        :return 
+            - output of the last encoder layer with shape (batch x src_len x embed_size)
+            -  attention value vector (batch x src_len x embed_size)
         """
         x = self.pse(src_embed) # add positional encoding
         x = self.emb_dropout(x)
+        inital_input = x
+        # project to dim of first conv layer
+        x = self.map_to_conv_dim(x)
+        # (batch x src_len x emb_size) -> (batch x emb_size x src_len)
+        x = x.transpose(1,2)
         for layer in self.conv_layers:
-            x = layer(src_embed)
-        x = self.map_to_emb_dim(x) 
+            x = layer(x)
+        # (batch x emb_size x src_len) -> (batch x src_len x emb_size
+        x = x.transpose(2,1)
+        # project to embedding dim to calculate the attention value
+        x = self.map_to_emb_dim(x)
         # for attention add current embedded element to the output of the last encoder layer
-        # and scale by 0.5 as proposed by the paper
-        x = (x+src_embed) * sqrt(0.5)
-        return x
+        attention_values = (x+inital_input) * sqrt(0.5)
+        return (x,attention_values)
 
     def _build_layers(self):       
         for conv in self.convs:
+            in_channels = conv["output_channels"]
             self.conv_layers.append(CNNEncoderLayer(
-                                    self.emb_size,self.input_size,
+                                    self.emb_size,in_channels,
                                     conv["output_channels"],
                                     conv["kernel_width"],
                                     conv["residual"],

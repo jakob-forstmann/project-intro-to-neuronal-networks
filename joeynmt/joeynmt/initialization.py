@@ -131,7 +131,7 @@ def initialize_model(model: nn.Module, cfg: dict, src_padding_idx: int,
     bias_init_weight = float(cfg.get("bias_init_weight", 0.01))
 
     linear_init = cfg.get("linear_initializer","normal")
-    linear_init_weight = cfg.get("linear_init_weight",0)
+    linear_init_weight = cfg.get("linear_init_weight",0.1)
     if (init == "xavier_normal"
             and cfg["encoder"]["type"] == cfg["decoder"]["type"] == "transformer"):
         # apply `alpha`: weight factor for residual connection
