@@ -12,6 +12,7 @@ from joeynmt.builders import build_activation
 from joeynmt.encoders import Encoder
 from joeynmt.helpers import ConfigurationError, freeze_params, subsequent_mask
 from joeynmt.transformer_layers import PositionalEncoding, TransformerDecoderLayer
+from joeynmt.cnn_layers import CNNDecoderLayer
 
 
 class Decoder(nn.Module):
@@ -597,3 +598,71 @@ class TransformerDecoder(Decoder):
                 f"alpha={self.layers[0].alpha}, "
                 f'layer_norm="{self.layers[0]._layer_norm_position}", '
                 f"activation={self.layers[0].feed_forward.pwff_layer[1]})")
+
+class CNNDecoder(Decoder):
+    """ implements the Decoder from Convolutional Sequence to Sequence Learning"""
+    def __init__(self, 
+                emb_size:int,
+                num_layers:int=1,
+                layers:dict[str,dict[str,int]]={"layer 1": {"output_channels":512,"kernel_width":3,"residual":True}},
+                dropout:float = 0.1,
+                emb_dropout:float=0.1,):
+        """
+        initialize the CNN Decoder  
+        :param num_layers: number of layers each layer contains of a 1D convolutional followed by a GLU  
+        :param layers: a dict of layer name(just for convience) and the layers output_channels,kernel_width 
+        and wether a residual connection should be used 
+        :param dropout: probality for dropout 
+        """
+        super().__init__()
+        self.num_layers = num_layers
+        self.layers = layers
+        self.convs:list[dict[str,int]] = [*self.layers.values()]
+        if len(self.layers)!=self.num_layers:
+                self._use_default_settings()
+        self.emb_size = emb_size
+        self.conv_layers= nn.ModuleList([])
+        self.input_size = self.convs[0]["output_channels"]
+        self.pse = PositionalEncoding(self.input_size)
+        self.emb_dropout = nn.Dropout(p=emb_dropout)
+        self.dropout = dropout
+        self._build_layers()
+
+    def forward(self,
+                trg_embed: Tensor,
+                encoder_output: Tensor,
+                src_mask: Tensor,
+                trg_mask: Tensor,
+                **kwargs,):
+        """
+        pass the embedded input tensor to each layer of the CNN Decoder
+        Each Layer is the same as the CNN Encoder Layer plus attention 
+        between each decoder layer and the state from the last 
+        encoder layer
+        :param src_embed (batch x src_len x embed_size)
+        :param trg_mask to mask out target paddings 
+        Note that to hide future positions in the target padding 
+        instead of another mask is used
+        """
+        x = self.pse(trg_embed) # add positional encoding
+        x = self.emb_dropout(x)
+        for layer in self.conv_layers:
+            x = layer(x,encoder_output,trg_mask)
+        x = self.map_to_emb_dim(x) 
+        return x
+
+    def _build_layers(self):       
+        for conv in self.convs:
+            self.conv_layers.append(CNNDecoderLayer(
+                                    self.emb_size,self.input_size,
+                                    conv["output_channels"],
+                                    conv["kernel_width"],
+                                    conv["residual"],
+                                    dropout=self.dropout))
+
+    def _use_default_settings(self):
+        """ fills convs with values up to num_layers with the standard values 
+        convs now contains num_layers many entries with the values for each layer"""    
+        self.convs = self.convs + [ {"output_channels":512,"kernel_width":3,"residual":True} 
+                     for i in range((len(self.layers)),self.num_layers)]
+

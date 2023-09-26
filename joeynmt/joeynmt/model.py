@@ -11,7 +11,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from joeynmt.decoders import Decoder, RecurrentDecoder, TransformerDecoder
+from joeynmt.decoders import Decoder, RecurrentDecoder, TransformerDecoder,CNNDecoder
 from joeynmt.embeddings import Embeddings
 from joeynmt.encoders import Encoder, RecurrentEncoder, TransformerEncoder,CNNEncoder
 from joeynmt.helpers import ConfigurationError
@@ -331,6 +331,11 @@ def build_model(cfg: dict = None,
             emb_size=trg_embed.embedding_dim,
             emb_dropout=dec_emb_dropout,
         )
+    elif dec_cfg.get("type", "transformer") == "convolutional":
+        emd_dim = src_embed.embedding_dim
+        enc_emb_dropout = enc_cfg["embeddings"].get("dropout", enc_dropout)
+        layers = enc_cfg.get("layers",{"output_channels":512,"kernel_width":3,"residual":True})
+        encoder = CNNDecoder(**enc_cfg,emb_size=emb_size,layers=layers,emb_dim=emd_dim)
     else:
         decoder = RecurrentDecoder(
             **dec_cfg,
