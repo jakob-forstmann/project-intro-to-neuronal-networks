@@ -311,7 +311,7 @@ class CNNEncoder(Encoder):
         x = x.transpose(1,2)
         for layer in self.conv_layers:
             x = layer(x)
-        # (batch x emb_size x src_len) -> (batch x src_len x emb_size
+        # (batch x output_channels x src_len) -> (batch x src_len x output_channels)
         x = x.transpose(2,1)
         # project to embedding dim to calculate the attention value
         x = self.map_to_emb_dim(x)
@@ -327,7 +327,6 @@ class CNNEncoder(Encoder):
                                     conv["output_channels"],
                                     conv["kernel_width"],
                                     conv["residual"],
-                                    self.padding,
                                     self.dropout))
             in_channels = conv["output_channels"]
 
