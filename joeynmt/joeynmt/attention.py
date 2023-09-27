@@ -5,6 +5,7 @@ Attention modules
 from typing import Tuple
 
 import numpy as np
+from math import sqrt
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
@@ -218,3 +219,46 @@ class LuongAttention(AttentionMechanism):
 
     def __repr__(self):
         return "LuongAttention"
+
+
+class ConvolutionalAttention(AttentionMechanism):
+    """ implements Multi-Step Attention 
+        as described in Section 3.3. in https://arxiv.org/abs/1705.03122
+    """
+    def __init__(self,conv_dim,embd_dim):
+        super().__init__()
+        self.map_to_emb_dim = nn.Linear(conv_dim,embd_dim)
+        self.map_to_conv_dim = nn.Linear(embd_dim,conv_dim)
+
+    def forward(self,
+                last_encoder_state,
+                encoder_attention_value,
+                current_decoder_state,
+                padding_mask_encoder,
+                target_embedding):
+        """
+        :param last_encoder_state: batch x src_len x emb_size
+        :encoder_attention_value:value for computing the attention vector batch x src_len x emb_size
+        :param current_decoder_state: tgt_size x batch x output_channels 
+        :padding_mask_encoder: mask padding in the encoder output
+        :param target_embedding: batch x src_len x embed_size
+        :return context vector batch x emb_size x src_len
+        """
+        x = self.map_to_conv_dim(current_decoder_state)
+        # tgt_size x batch x output_channels -> batch x trg_len x output_channels
+        x = x.transpose(1,0)
+        x = (x+target_embedding)*sqrt(0.5)
+        #  batch x src_len x emb_size -> batch x emb_size x src_len
+        x = x.transpose(1,2)
+        x = x@last_encoder_state
+        # mask padding in the encoder output
+        x =x.masked_fill(padding_mask_encoder,float("-inf"))
+        x = F.softmax(x,dim=-1)
+        #  batch x src_len x emb_size -> batch x emb_size x src_len
+        x = encoder_attention_value.transpose(1,2)
+        context_vector = x@encoder_attention_value
+        seq_length = encoder_attention_value.shape[1]
+        # scale context vector by sequence length e.g. the number of performed multiplications
+        context_vector = context_vector*seq_length*(1-sqrt(seq_length))
+        context_vector = self.map_to_conv_dim(context_vector)
+        return context_vector
