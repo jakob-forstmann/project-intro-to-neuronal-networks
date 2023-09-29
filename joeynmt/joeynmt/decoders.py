@@ -6,6 +6,8 @@ from typing import Optional, Tuple
 
 import torch
 from torch import Tensor, nn
+from torch.nn.utils import weight_norm
+
 
 from joeynmt.attention import BahdanauAttention, LuongAttention
 from joeynmt.builders import build_activation
@@ -571,7 +573,6 @@ class TransformerDecoder(Decoder):
             - None
         """
         assert trg_mask is not None, "trg_mask required for Transformer"
-
         x = self.pe(trg_embed)  # add position encoding to word embedding
         x = self.emb_dropout(x)
 
@@ -602,15 +603,18 @@ class TransformerDecoder(Decoder):
 class CNNDecoder(Decoder):
     """ implements the Decoder from Convolutional Sequence to Sequence Learning"""
     def __init__(self, 
+                layers:dict[str,dict[str,int]],
                 emb_size:int,
                 num_layers:int=1,
-                layers:dict[str,dict[str,int]]={"layer 1": {"output_channels":512,"kernel_width":3,"residual":True}},
+                out_embed_dim:int=256,
                 dropout:float = 0.1,
-                emb_dropout:float=0.1,):
+                emb_dropout:float=0.1,
+                vocab_size: int = 1,
+                **kwargs):
         """
         initialize the CNN Decoder  
         :param num_layers: number of layers each layer contains of a 1D convolutional followed by a GLU  
-        :param layers: a dict of layer name(just for convience) and the layers output_channels,kernel_width 
+        :param layers: a dict of layer name(just for convenience) and the layers output_channels,kernel_width 
         and wether a residual connection should be used 
         :param dropout: probality for dropout 
         """
@@ -625,31 +629,47 @@ class CNNDecoder(Decoder):
         self.input_size = self.convs[0]["output_channels"]
         self.pse = PositionalEncoding(self.input_size)
         self.emb_dropout = nn.Dropout(p=emb_dropout)
+        last_output_channel = self.convs[-1]["output_channels"]
+        self.map_to_conv_dim = weight_norm(nn.Linear(self.emb_size,self.input_size))
+        self.map_to_out_emb_dim = weight_norm(nn.Linear(last_output_channel,out_embed_dim))
+        self.map_to_output_dim = weight_norm(nn.Linear(out_embed_dim,vocab_size))
         self.dropout = dropout
         self._build_layers()
 
     def forward(self,
                 trg_embed: Tensor,
                 encoder_output: Tensor,
+                encoder_hidden: Tensor,
                 src_mask: Tensor,
-                trg_mask: Tensor,
-                **kwargs,):
+                #unroll_steps: int,
+                #hidden: Tensor,
+                #trg_mask: Tensor,
+                **kwargs):
         """
         pass the embedded input tensor to each layer of the CNN Decoder
         Each Layer is the same as the CNN Encoder Layer plus attention 
         between each decoder layer and the state from the last 
         encoder layer
-        :param src_embed (batch x src_len x embed_size)
-        :param trg_mask to mask out target paddings 
-        Note that to hide future positions in the target padding 
-        instead of another mask is used
+        :param trg_embed (batch x trg_embed x embed_size)
+        :param encoder output (batch x src_len x embed_size)
+        :param encoder_hidden: the attention value for the encoder-decoder attention
+        :return 
+            - decoder_output: shape (batch_size, seq_len, vocab_size)
+            - decoder_hidden: shape (batch_size, seq_len, emb_size)
+            - att_probs: shape (batch_size, trg_length, emb_size),
+            - None
         """
         x = self.pse(trg_embed) # add positional encoding
         x = self.emb_dropout(x)
+        x = self.map_to_conv_dim(x)
         for layer in self.conv_layers:
-            x = layer(x,encoder_output,trg_mask)
-        x = self.map_to_emb_dim(x) 
-        return x
+            x,att_score= layer(x,
+                      encoder_output,
+                      encoder_attention_value=encoder_hidden,
+                      src_mask=src_mask)
+        x = self.map_to_out_emb_dim(x)
+        out = self.map_to_output_dim(x)
+        return out,x,att_score,None
 
     def _build_layers(self):       
         for conv in self.convs:

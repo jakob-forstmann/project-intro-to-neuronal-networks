@@ -264,11 +264,12 @@ class TransformerEncoder(Encoder):
 class CNNEncoder(Encoder):
     """ implements the Encoder from Convolutional Sequence to Sequence Learning"""
     def __init__(self, 
+                layers:dict[str,dict[str,int]],
                 emb_size:int,
                 num_layers:int=1,
-                layers:dict[str,dict[str,int]]={"layer 1": {"output_channels":512,"kernel_width":3,"residual":True}},
                 dropout:float = 0.1,
-                emb_dropout:float=0.1,):
+                emb_dropout:float=0.1,
+                **kwargs):
         """
         initialize the CNN Encoder 
         :param num_layers: number of layers,each layer contains of a 1D convolutional followed by a GLU  
