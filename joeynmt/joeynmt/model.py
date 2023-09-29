@@ -302,7 +302,6 @@ def build_model(cfg: dict = None,
             "for transformer, emb_size must be "
             "the same as hidden_size")
         emb_size = src_embed.embedding_dim
-        print("TRANSFORMER  kwargs",enc_cfg)
         encoder = TransformerEncoder(
             **enc_cfg,
             emb_size=emb_size,
@@ -313,6 +312,8 @@ def build_model(cfg: dict = None,
         emd_dim = src_embed.embedding_dim
         enc_emb_dropout = enc_cfg["embeddings"].get("dropout", enc_dropout)
         encoder = CNNEncoder(**enc_cfg,emb_size=emd_dim)
+        enc_cfg = encoder.get_layer_init_values()
+        cfg.update(enc_cfg)
     else:
         encoder = RecurrentEncoder(
             **enc_cfg,
@@ -334,7 +335,6 @@ def build_model(cfg: dict = None,
     elif dec_cfg.get("type", "transformer") == "convolutional":
         emd_dim = src_embed.embedding_dim
         enc_emb_dropout = dec_cfg["embeddings"].get("dropout", enc_dropout)
-        print("dec",dec_cfg)
         decoder = CNNDecoder(**dec_cfg,emb_size=emd_dim)
     else:
         decoder = RecurrentDecoder(

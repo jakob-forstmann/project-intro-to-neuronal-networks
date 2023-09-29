@@ -1,6 +1,5 @@
 import copy
 import unittest
-
 import torch
 from torch import nn
 
@@ -99,3 +98,60 @@ class TestModelInit(unittest.TestCase):
             rtol=1e-4,
             atol=1e-4,
         )
+
+    def test_cnn_layers_init(self):
+        torch.manual_seed(self.seed)
+        cfg = self.create_cnn_config()    
+        model = build_model(cfg["model"], src_vocab=self.vocab, trg_vocab=self.vocab)
+        convolutional_inits = model.encoder.cfg["conv_layer_init"]
+        first_layer_init    = model.encoder.cfg["first_linear_layer"]
+        last_layer_init    = model.encoder.cfg["last_linear_layer"]
+        assert first_layer_init == 0.04192627457812106
+        assert last_layer_init == 0.04192627457812106
+        expected_conv_inits = [ 0.04841229182759271,0.04841229182759271,
+                                0.04841229182759271,0.04841229182759271]
+        assert convolutional_inits[0:5] == expected_conv_inits
+    
+    def create_cnn_config(self):
+        return {
+            "model": {
+                "tied_embeddings": False,
+                "tied_softmax": False,
+                "initializer": "normal",
+                "linear_initializer": "normal",
+                "convolutional_initializer":"normal",
+                "embed_initializer": "normal",    
+                "embed_init_weight": 0.1,      
+                "bias_initializer": "zeros", 
+                "encoder":{ 
+                            "type": "convolutional",
+                            "embeddings": {
+                                "embedding_dim": 512,
+                            },
+                            "layers": {
+                                "layer 1": {
+                                    "output_channels":512,
+                                    "kernel_width":3,
+                                    "residual":True,
+                                },
+                            },
+                            "num_layers": 4,
+                            "dropout": 0.1,
+                    },
+               "decoder": {
+                            "type": "convolutional",
+                            "embeddings": {
+                                "embedding_dim": 512,
+                            },
+                            "layers": {
+                                "layer 1": {
+                                    "output_channels":512,
+                                    "kernel_width":3,
+                                    "residual":True,
+                                },
+                            },
+                            "num_layers": 4,
+                            "dropout": 0.1,
+                }
+            }
+        }

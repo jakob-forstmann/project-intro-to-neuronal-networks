@@ -284,15 +284,17 @@ class CNNEncoder(Encoder):
         if len(self.layers)!=self.num_layers:
                 self._use_default_settings()
         self.in_channels_first_layer = self.convs[0]["output_channels"]
-        out_channel_last_layer = self.convs[-1]["output_channels"]
+        self.out_channel_last_layer = self.convs[-1]["output_channels"]
         self.emb_size = emb_size
         self.pse = PositionalEncoding(self.in_channels_first_layer)
         self.emb_dropout = nn.Dropout(p=emb_dropout)
         self.dropout = dropout
         self.map_to_conv_dim = weight_norm(nn.Linear(self.emb_size,self.in_channels_first_layer))
-        self.map_to_emb_dim = weight_norm(nn.Linear(out_channel_last_layer,self.emb_size))
+        self.map_to_emb_dim = weight_norm(nn.Linear(self.out_channel_last_layer,self.emb_size))
         self.conv_layers= nn.ModuleList([])
-        self._build_layers()
+        self.build_layers_()
+        self.cfg = kwargs
+        self.init_layers_()
 
     def forward(self,src_embed: Tensor):
         """
@@ -310,7 +312,6 @@ class CNNEncoder(Encoder):
         x = self.map_to_conv_dim(x)
         x = x.transpose(1,2)
         # (batch x src_len x emb_size) -> (batch x emb_size x src_len)
-        print("VOR CONV",x)
         for layer in self.conv_layers:
             x = layer(x)
         # (batch x output_channels x src_len) -> (batch x src_len x output_channels)
@@ -321,7 +322,7 @@ class CNNEncoder(Encoder):
         attention_values = (x+inital_input) * sqrt(0.5)
         return x,attention_values
 
-    def _build_layers(self):       
+    def build_layers_(self):       
         in_channels = self.in_channels_first_layer
         for conv in self.convs:
             self.conv_layers.append(CNNEncoderLayer(
@@ -334,8 +335,26 @@ class CNNEncoder(Encoder):
 
     def _use_default_settings(self):
         """ fills convs with values up to num_layers with the standard values 
-        convs now contains num_layers many entries with the values for each layer"""    
+        convs now contains num_layers many entries with the values for each layer"""
         self.convs = self.convs + [ {"output_channels":512,"kernel_width":3,"residual":True} 
                      for i in range((len(self.layers)),self.num_layers)]
 
-   
+    def init_layers_(self):
+        """ computes the init weights for the different layers
+        They are added to encoder config dict so that they can be used as values 
+        for the available probability distribution in initialization.py"""
+        std_first_linear_layer = sqrt((1 - self.dropout) / self.in_channels_first_layer)
+        std_last_linear_layer = sqrt((1 - self.dropout) / self.out_channel_last_layer)
+        in_channels = self.in_channels_first_layer
+        conv_inits = []
+        for conv_layer in self.convs:
+            std = sqrt((4 * (1.0 - self.dropout)) / (conv_layer["kernel_width"] * in_channels))
+            conv_inits.append(std)
+            in_channels = conv_layer["output_channels"]
+
+        self.cfg["conv_layer_init"] = conv_inits
+        self.cfg["first_linear_layer"] = std_first_linear_layer
+        self.cfg["last_linear_layer"]  = std_last_linear_layer
+
+    def get_layer_init_values(self):
+        return self.cfg

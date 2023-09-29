@@ -6,13 +6,16 @@ from math import sqrt
 
 class TestCNNEncoderLayer(unittest.TestCase):
     def setUp(self):
-        self.emb_size = 512
+        self.emb_size =512
+        torch.manual_seed(42)
+
     def get_encoder(self,
-                    num_layers:int=4,
+                    emb_size = 512,
+                    num_layers:int = 4,
                     convolutions:dict[str,dict[str,int]]=None
                     ):
 
-        return CNNEncoder(self.emb_size,num_layers,convolutions)
+        return CNNEncoder(convolutions,emb_size,num_layers)
 
     def test_layers_expansion(self):
         convolutions = {"layer 1": {"output_channels":512,"kernel_width":5,"residual":True},
@@ -37,7 +40,8 @@ class TestCNNEncoderLayer(unittest.TestCase):
                         "layer 3": {"output_channels":512,"kernel_width":3,"residual":True},
                         "layer 4": {"output_channels":512,"kernel_width":3,"residual":True}}
 
-        # first two layer: 128+2*2-(5-1)-1+1 = 128 last three layers: 128+2-(3-1)+1-1 = 128
+        # output shape batch x output_channels x trgt_len
+        # output channels: first two layer: 128+2*2-(5-1)-1+1 = 128 last three layers: 128+2-(3-1)+1-1 = 128
         # taken from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
         expected_output_shape = torch.Size([10,128,512])
 
@@ -60,4 +64,4 @@ class TestCNNEncoderLayer(unittest.TestCase):
         assert last_encoder_output.shape == expected_output_shape
         self.assertFalse(torch.any(torch.eq(test_input,last_encoder_output)))
 
-
+   
