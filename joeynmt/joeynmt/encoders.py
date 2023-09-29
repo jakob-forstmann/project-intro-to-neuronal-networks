@@ -271,8 +271,8 @@ class CNNEncoder(Encoder):
                 emb_dropout:float=0.1,):
         """
         initialize the CNN Encoder 
-        :param num_layers: number of layers each layer contains of a 1D convolutional followed by a GLU  
-        :param layers: a dict of layer name(just for convience) and the layers output_channels,kernel_width 
+        :param num_layers: number of layers,each layer contains of a 1D convolutional followed by a GLU  
+        :param layers: a dict of layer name(unused) and the layers output_channels,kernel_width 
         and wether a residual connection should be used 
         :param dropout probality for dropout 
         """
@@ -300,15 +300,16 @@ class CNNEncoder(Encoder):
         :param src_embed (batch x src_len x embed_size)
         :return 
             - output of the last encoder layer with shape (batch x src_len x embed_size)
-            -  attention value vector (batch x src_len x embed_size)
+            -  attention value vector with shape (batch x src_len x embed_size)
         """
         x = self.pse(src_embed) # add positional encoding
         x = self.emb_dropout(x)
         inital_input = x
         # project to dim of first conv layer
         x = self.map_to_conv_dim(x)
-        # (batch x src_len x emb_size) -> (batch x emb_size x src_len)
         x = x.transpose(1,2)
+        # (batch x src_len x emb_size) -> (batch x emb_size x src_len)
+        print("VOR CONV",x)
         for layer in self.conv_layers:
             x = layer(x)
         # (batch x output_channels x src_len) -> (batch x src_len x output_channels)
@@ -317,7 +318,7 @@ class CNNEncoder(Encoder):
         x = self.map_to_emb_dim(x)
         # for attention add current embedded element to the output of the last encoder layer
         attention_values = (x+inital_input) * sqrt(0.5)
-        return (x,attention_values)
+        return x,attention_values
 
     def _build_layers(self):       
         in_channels = self.in_channels_first_layer
