@@ -1,9 +1,8 @@
 import unittest
 
 import torch
-
-from joeynmt.attention import BahdanauAttention, LuongAttention
-
+from torch import nan
+from joeynmt.attention import BahdanauAttention, LuongAttention,ConvolutionalAttention
 
 class TestBahdanauAttention(unittest.TestCase):
 
@@ -408,3 +407,57 @@ class TestLuongAttention(unittest.TestCase):
         ])
         torch.testing.assert_close(
             self.luong_att.proj_keys, proj_keys_targets, rtol=1e-4, atol=1e-4)
+
+class TestConvolutionalAttention(unittest.TestCase):
+    def setUp(self):
+        self.batch_size = 2
+        self.tgt_len = 4 
+        self.emb_size = 2
+        self.output_channels = 5
+        self.attention = ConvolutionalAttention(self.output_channels,self.emb_size)
+        torch.manual_seed(42)
+
+    def test_attention_output(self):
+        target_embedding = torch.randn(self.batch_size,self.tgt_len,self.emb_size)
+        # encoder output shape 
+        last_encoder_state = torch.randn(self.batch_size,self.tgt_len,self.emb_size)
+        encoder_attention_value = torch.randn(self.batch_size,self.tgt_len,self.emb_size)
+        # tgt_size x batch x output_channels
+        #current_decoder_state = torch.randn(self.tgt_len,self.batch_size,self.output_channels)
+        current_decoder_state = torch.randn(self.batch_size,self.output_channels,self.tgt_len)
+        # batch x trg_len 
+        src_mask = torch.zeros(size=(self.batch_size,self.tgt_len),dtype=torch.bool)
+        src_mask[:,3:]=True
+        src_mask = src_mask.unsqueeze(-1)
+        # batch x trg_len x1 -> batch x 1 x src_len
+        src_mask = src_mask.transpose(2,1) 
+        # The Decoder transforms the encoder output in order for the calculation to work out.
+        # batch x tgt_len x emb_size -> batch x emb_size x tgt_len
+        last_encoder_state = last_encoder_state.transpose(1,2)
+        
+        for p in self.attention.parameters():
+            torch.nn.init.normal_(p,0, 0.5)
+        
+        context_vector,_ = self.attention(last_encoder_state,
+                                        encoder_attention_value,
+                                        current_decoder_state,
+                                        src_mask,
+                                        target_embedding)
+        
+        expected_context_vectors = torch.Tensor([
+                                        [                                         
+                                                    [-0.5709,  1.6950, -1.0030,  2.2754,  1.1494],
+                                                    [-0.3070,  2.2598, -0.1473,  2.9817,  0.7893],
+                                                    [ 0.2450,  0.6988, -0.2574,  0.6971,  1.7691],
+                                                    [ 0.5142, -0.8867, -0.1053,  0.5318,  0.6330]
+                                        ],
+                                        [           [ 0.8326,  1.3895, -0.1031,  1.2554,  1.5792],
+                                                    [ 0.6729,  0.3013, -1.4111,  2.3968, -0.5336],
+                                                    [ 0.0300,  0.2055, -0.8376,  2.1306,  0.5741],
+                                                    [ 1.5380,  1.5253, -0.0703,  1.4701,  0.7544]
+                                        ]
+                                                ])
+
+        torch.testing.assert_close(
+          context_vector, expected_context_vectors, rtol=1e-4, atol=1e-4) 
+        

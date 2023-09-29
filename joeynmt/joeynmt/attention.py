@@ -176,6 +176,7 @@ class LuongAttention(AttentionMechanism):
         assert mask is not None, "mask is required"
 
         # scores: batch_size x 1 x src_length
+        # batch x 1 x hidden @ batch x hidden x src
         scores = query @ self.proj_keys.transpose(1, 2)
 
         # mask out invalid positions by filling the masked out parts with -inf
@@ -237,28 +238,41 @@ class ConvolutionalAttention(AttentionMechanism):
                 padding_mask_encoder,
                 target_embedding):
         """
-        :param last_encoder_state: batch x src_len x emb_size
-        :encoder_attention_value:value for computing the attention vector batch x src_len x emb_size
-        :param current_decoder_state: tgt_size x batch x output_channels 
+        computes the attention score between each decoder state and the last decoder state 
+
+        :param last_encoder_state: batch x emb_size x trg_len
+        :encoder_attention_value:value last encoder_state + input embeddings batch x src_len x emb_size
+        :param current_decoder_state: batch x out_channels x trg_len
         :padding_mask_encoder: mask padding in the encoder output
         :param target_embedding: batch x src_len x embed_size
-        :return context vector batch x emb_size x src_len
+        :return context vector batch x src_len x embed_size 
         """
-        x = self.map_to_conv_dim(current_decoder_state)
-        # tgt_size x batch x output_channels -> batch x trg_len x output_channels
-        x = x.transpose(1,0)
+        
+        # batch x out_channels x trg_len -> batch x trg_len x output_channels
+        x = current_decoder_state.transpose(1,2)
+        residual = x
+        # add target embedding to decoder output 
+        x = self.map_to_emb_dim(x)     
         x = (x+target_embedding)*sqrt(0.5)
-        #  batch x src_len x emb_size -> batch x emb_size x src_len
-        x = x.transpose(1,2)
+       
+        # compute attention score
         x = x@last_encoder_state
-        # mask padding in the encoder output
-        x =x.masked_fill(padding_mask_encoder,float("-inf"))
-        x = F.softmax(x,dim=-1)
-        #  batch x src_len x emb_size -> batch x emb_size x src_len
-        x = encoder_attention_value.transpose(1,2)
+
+        # mask out padding positions
+        x = x.masked_fill(padding_mask_encoder,float("-inf"))
+        # turn scores into probalities
+        x = F.softmax(x,dim=-1)     
+               
+        # context vector is the weighted sum of the values
         context_vector = x@encoder_attention_value
+        
+        # scale context vector the number of performed multiplications = trg_len - number of padded vectors
+        # since we dont want to include the paddded areas in the final context vector
         seq_length = encoder_attention_value.shape[1]
-        # scale context vector by sequence length e.g. the number of performed multiplications
-        context_vector = context_vector*seq_length*(1-sqrt(seq_length))
-        context_vector = self.map_to_conv_dim(context_vector)
-        return context_vector
+        num_of_padded_inputs = padding_mask_encoder.type_as(context_vector).sum(dim=2,keepdim=True)
+        num_vecs_without_padded = seq_length-num_of_padded_inputs
+        context_vector = context_vector*(num_vecs_without_padded*num_vecs_without_padded.rsqrt())
+
+        # add context vector to the decoder output 
+        x = (self.map_to_conv_dim(context_vector)+residual) * sqrt(0.5)
+        return (x,context_vector)
