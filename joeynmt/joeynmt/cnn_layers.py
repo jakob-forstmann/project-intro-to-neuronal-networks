@@ -58,12 +58,7 @@ class CNNEncoderLayer(nn.Module):
             return (self.kernel_width-1)//2
         raise RuntimeError("only odd sized kernel are supported")
    
-    def add_residual_connections(self):
-        if self.residual:
-            # map from in_channels to output_channels since otherwise the sum of 
-            # the output of a layer and its input would be impossible
-            if self.in_channels != self.out_channels:
-                self.map_residual_to_output = nn.Linear(self.in_channels,self.out_channels)
+
     
 class CNNDecoderLayer(nn.Module):
     def __init__(
@@ -87,7 +82,7 @@ class CNNDecoderLayer(nn.Module):
         self.conv1D = weight_norm(nn.Conv1d(self.in_channels,
                                             self.out_channels*2,
                                             self.kernel_width,
-                                            padding=self._add_padding()))
+                                            padding=self.add_padding_()))
         self.encoder_decoder_attention = ConvolutionalAttention(self.out_channels,embd_dim)
         
     def forward(
@@ -110,7 +105,7 @@ class CNNDecoderLayer(nn.Module):
         x = self.conv1D(x)
         inital_input = x
         x = F.glu(x,dim=1)
-        # remove kernel_width-1 elements from the end side of the output
+        # remove padded elements from the end of the output
         x = x[:,:,:-(self.kernel_width-1)]
         encoder_output =self.transpose_encoder_output(encoder_output)
         x,att_score = self.encoder_decoder_attention(encoder_output,
@@ -129,14 +124,8 @@ class CNNDecoderLayer(nn.Module):
         neccessary for calculating the attention score"""
         return encoder_output.transpose(2,1)
 
-    def _add_padding(self):
+    def add_padding_(self):
         if self.kernel_width%2== 1:   
             return self.kernel_width-1
         raise RuntimeError("only odd sized kernel are supported")
    
-    def add_residual_connections(self):
-        if self.residual:
-            # map from in_channels to output_channels since otherwise the sum of 
-            # the output of a layer and its input would be impossible
-            if self.in_channels != self.out_channels:
-                self.map_residual_to_output = nn.Linear(self.in_channels,self.out_channels)
