@@ -627,7 +627,7 @@ class CNNDecoder(Decoder):
         self.emb_size = emb_size
         self.conv_layers= nn.ModuleList([])
         self.input_size = self.convs[0]["output_channels"]
-        self.pse = PositionalEncoding(self.input_size)
+        self.pse = PositionalEncoding(self.emb_size)
         self.emb_dropout = nn.Dropout(p=emb_dropout)
         last_output_channel = self.convs[-1]["output_channels"]
         self.map_to_conv_dim = weight_norm(nn.Linear(self.emb_size,self.input_size))
@@ -641,9 +641,9 @@ class CNNDecoder(Decoder):
                 encoder_output: Tensor,
                 encoder_hidden: Tensor,
                 src_mask: Tensor,
-                #unroll_steps: int,
-                #hidden: Tensor,
-                #trg_mask: Tensor,
+                unroll_steps: int,
+                hidden: Tensor,
+                trg_mask: Tensor,
                 **kwargs):
         """
         pass the embedded input tensor to each layer of the CNN Decoder
@@ -663,10 +663,11 @@ class CNNDecoder(Decoder):
         x = self.emb_dropout(x)
         x = self.map_to_conv_dim(x)
         for layer in self.conv_layers:
-            x,att_score= layer(x,
-                      encoder_output,
-                      encoder_attention_value=encoder_hidden,
-                      src_mask=src_mask)
+            x,att_score= layer( x,
+                                trg_embed,
+                                encoder_output,
+                                encoder_attention_value=encoder_hidden,
+                                src_mask=src_mask)
         x = self.map_to_out_emb_dim(x)
         out = self.map_to_output_dim(x)
         return out,x,att_score,None

@@ -15,7 +15,6 @@ class CNNEncoderLayer(nn.Module):
     Also the layer is weight normalized https://arxiv.org/pdf/1602.07868.pdf 
     """
     def __init__(self,
-                embd_dim:int,
                 in_channels:int,
                 out_channels:int=512,
                 kernel_width:int=3,
@@ -87,6 +86,7 @@ class CNNDecoderLayer(nn.Module):
         
     def forward(
         self,
+        x:Tensor,
         trg_embed: Tensor,
         encoder_output: Tensor,
         encoder_attention_value:Tensor,
@@ -94,16 +94,17 @@ class CNNDecoderLayer(nn.Module):
         **kwargs,
     ):
         """
+        :param x: positional embedded input to the current layer, batch x trg_size x output_channels
         :param trg_embed: embedded targets batch x trg_size x embd_size 
         :param encoder_output: last encoder state batch x trg_len x embed_size
         :param src_mask: to mask out source paddings
         :param kwargs:
         """
         # (batch x trgt_size x emb_size) -> (batch x emb_size x src_len)
-        x = trg_embed.transpose(1,2)
+        x = x.transpose(1,2)
+        inital_input = x
         x = self.dropout(x)
         x = self.conv1D(x)
-        inital_input = x
         x = F.glu(x,dim=1)
         # remove padded elements from the end of the output
         x = x[:,:,:-(self.kernel_width-1)]

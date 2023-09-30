@@ -286,7 +286,7 @@ class CNNEncoder(Encoder):
         self.in_channels_first_layer = self.convs[0]["output_channels"]
         self.out_channel_last_layer = self.convs[-1]["output_channels"]
         self.emb_size = emb_size
-        self.pse = PositionalEncoding(self.in_channels_first_layer)
+        self.pse = PositionalEncoding(self.emb_size)
         self.emb_dropout = nn.Dropout(p=emb_dropout)
         self.dropout = dropout
         self.map_to_conv_dim = weight_norm(nn.Linear(self.emb_size,self.in_channels_first_layer))
@@ -296,7 +296,11 @@ class CNNEncoder(Encoder):
         self.cfg = kwargs
         self.init_layers_()
 
-    def forward(self,src_embed: Tensor):
+    def forward(self,
+                src_embed: Tensor,
+                src_length: Tensor,  # unused
+                mask: Tensor = None,
+                **kwargs,):
         """
         pass the embedded input tensor to each layer of the CNN Encoder
         Each Layer consists of an 1D Convolutional followed by a GLU 
@@ -305,6 +309,9 @@ class CNNEncoder(Encoder):
             - output of the last encoder layer with shape (batch x src_len x embed_size)
             -  attention value vector with shape (batch x src_len x embed_size)
         """
+
+        print("CNN ENcoder emb size",self.emb_size)
+        print("CNN forward src_embed size batch x src_len x embed_size",src_embed.shape)
         x = self.pse(src_embed) # add positional encoding
         x = self.emb_dropout(x)
         inital_input = x
@@ -325,12 +332,11 @@ class CNNEncoder(Encoder):
     def build_layers_(self):       
         in_channels = self.in_channels_first_layer
         for conv in self.convs:
-            self.conv_layers.append(CNNEncoderLayer(
-                                    self.emb_size,in_channels,
-                                    conv["output_channels"],
-                                    conv["kernel_width"],
-                                    conv["residual"],
-                                    self.dropout))
+            self.conv_layers.append(CNNEncoderLayer(in_channels,
+                                                    conv["output_channels"],
+                                                    conv["kernel_width"],
+                                                    conv["residual"],
+                                                    self.dropout))
             in_channels = conv["output_channels"]
 
     def _use_default_settings(self):

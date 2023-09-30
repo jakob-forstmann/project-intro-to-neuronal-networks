@@ -239,20 +239,19 @@ class ConvolutionalAttention(AttentionMechanism):
                 target_embedding):
         """
         computes the attention score between each decoder state and the last decoder state 
-
-        :param last_encoder_state: batch x emb_size x trg_len
-        :encoder_attention_value:value last encoder_state + input embeddings batch x src_len x emb_size
+        :param last_encoder_state: batch x output_channels x trg_len
+        :encoder_attention_value:value last encoder_state + input embeddings batch x trg_len x emb_size
         :param current_decoder_state: batch x out_channels x trg_len
         :padding_mask_encoder: mask padding in the encoder output
-        :param target_embedding: batch x src_len x embed_size
-        :return context vector batch x src_len x embed_size 
+        :param target_embedding: batch x trg_len x embed_size
+        :return context vector batch x trg_len x embed_size 
         """
         
         # batch x out_channels x trg_len -> batch x trg_len x output_channels
         x = current_decoder_state.transpose(1,2)
         residual = x
         # add target embedding to decoder output 
-        x = self.map_to_emb_dim(x)     
+        x = self.map_to_emb_dim(x)  
         x = (x+target_embedding)*sqrt(0.5)
        
         # compute attention score

@@ -134,13 +134,22 @@ class TrainManager:
         elif self.early_stopping_metric in ["acc", "bleu", "chrf"]:  # higher is better
             self.minimize_metric = False
 
-        # learning rate scheduling
-        self.scheduler, self.scheduler_step_at = build_scheduler(
+        # learning rate scheduling   
+        if cfg["model"]["encoder"]["type"] == "convolutional":
+            # TODO: adapt learning rate scheduling to work with the different sized output channels sizes 
+            # as each convolutional layer can have a different size, 
+            # as a workround the standard channels output size is chosen
+            hidden_size = 512 #= self.get_current_output_channels(cfg)
+        else:
+            hidden_size = cfg["model"]["encoder"]["hidden_size"]
+
+        self.scheduler,self.scheduler_step_at = build_scheduler(
             config=cfg["training"],
             scheduler_mode="min" if self.minimize_metric else "max",
             optimizer=self.optimizer,
-            hidden_size=cfg["model"]["encoder"]["hidden_size"],
+            hidden_size=hidden_size,
         )
+
 
         # data & batch handling
         self.seed = seed
@@ -202,6 +211,13 @@ class TrainManager:
         self.valid_cfg["generate_unk"] = True
         self.valid_cfg["repetition_penalty"] = -1  # turn off
         self.valid_cfg["no_repeat_ngram_size"] = -1  # turn off
+
+    def get_current_output_channels(self,cfg):
+        layers = cfg["model"]["encoder"]["layers"]
+        num_layer = cfg["model"]["encoder"]["num_layers"]
+        for layer_name,layer_values in layers.items():
+            yield layers[layer_name]["output_channels"]
+
 
     def _save_checkpoint(self, new_best: bool, score: float) -> None:
         """
