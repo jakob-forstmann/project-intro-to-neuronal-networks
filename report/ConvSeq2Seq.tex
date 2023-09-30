@@ -1,0 +1,68 @@
+% This must be in the first 5 lines to tell arXiv to use pdfLaTeX, which is strongly recommended.
+\pdfoutput=1
+% In particular, the hyperref package requires pdfLaTeX in order to break URLs across lines.
+\documentclass[11pt]{article}
+
+% Remove the "review" option to generate the final version.
+\usepackage{acl}
+% Standard package includes
+\usepackage{times}
+\usepackage{latexsym}
+
+% For proper rendering and hyphenation of words containing Latin characters (including in bib files)
+\usepackage[T1]{fontenc}
+% For Vietnamese characters
+% \usepackage[T5]{fontenc}
+% See https://www.latex-project.org/help/documentation/encguide.pdf for other character sets
+
+% This assumes your files are encoded as UTF8
+\usepackage[utf8]{inputenc}
+
+% This is not strictly necessary, and may be commented out,
+% but it will improve the layout of the manuscript,
+% and will typically save some space.
+\usepackage{microtype}
+\usepackage{natbib}
+\usepackage{acronym}
+\bibliographystyle{acl_natbib}
+\title{ConvSeq2Seq in JoeyNMT}
+\author{Jakob Forstmann \\
+  Heidelberg University \\
+  Proseminar Introduction to Neuronal Networks and Sequence to Sequence Learning\\
+  \texttt{forstmann@cl.uni-heidelberg.de}}
+\begin{document}
+\maketitle
+\newacro {BPE} {Byte Pair Encoding}
+\newacro {GLU} {Gated Linear Unit}
+\section{Introduction}
+This paper describes the  implementation of Convolutional Sequence to Sequence Learning in JoeyNMT\cite{Joey} following the orignal implementation \footnote{ available at https://github.com/facebookresearch/fairseq}. As we are aiming for a simpler version compared to original implementation we  left out some optimizations described in the section Implementation.However we followed 
+the same preprocessing as described in the next section as closely as possible.
+\section{Preprocessing}
+In order to pre-process the data we simply adopted  the existing shell script to our needs. It includes two steps,tokenization and cleaning and applying \ac{BPE} \footnote{ As in the original paper we used the implementation from https://github.com/rsennrich/subword-nmt}.
+First of all, we normalized punctuation, removed non printable characters and tokenized the dataset using scripts from the moses library. 
+Furthermore we cleaned the test data by removing unnecessary HTML tokens from the test split. 
+Considering that the paper\cite{conv} evaluates on the task of neuronal machine translation the out of vocabulary problem could arise.
+Following the implementation of the paper we applied \ac{BPE}\cite{NMT} to alleviate this problem. The algorithm can be break down into the two steps, learning the representations and applying them.
+For the first step, a symbol vocabulary is built using the characters of the tokens from step one and a special symbol indicating the end of word. Then the most frequent pair of token from our vocabulary are merged replacing the two tokens from that pair. This process is repeated until  a chosen amount of merge operations are performed whereat each step the performed merge operation is stored. 
+In our case we used 4000 merge operations to learn the \ac{BPE} representations. 
+Following the second step the words from the corpus are first split  into characters in the same way as during learning and then use the stored operations to segment the words into sub words. 
+As an example directly taken from the paper consider the out of vocabulary german compound word \textit{Gesundheitsforschungsinstitute}. In order to translate the word is split into five sub words which are then translated one by another. As a consequence using \ac{BPE} we can tackle the open vocabulary problem with a fixed size vocabulary.
+
+\section{Model Architecture}
+In a broad view the model follows the common encoder-decoder framework, however instead of using Transformers it uses CNNs for the encoder and the decoder. Both of them embeds the source respective the target sentence and concatenate the embedding with positional encoding of size \(f\). In contrast to the encoder the input for the decoder is right shifted such that the decoder can not see future words.
+Furthermore the k-1 element  elements on the left and the right side of the decoders input are padded to hide future positions. For example for the first element of the right shifted sentence the padded decoders input would be (<pad>)*k-1<start of sequence> effectively hiding the k-1 after the <start of sequence> symbol. After the convolution was performed the k-1 element are discarded from the output 
+as their prediction is useless and the size of the decoders output should mirror the size of the encoders output. On the other hand the encoder uses zero padding to match the sequence  length of the  input sequence.
+
+\noindent Then again the encoder as well as the decoder consists of a chosen amount of layers which in turn contains a 1D convolution operating on a one sequence as opposed to operating on for example images with a 2d convolution. In both parts each convolution applies a kernel \(W^{2d x kd}\) producing vectors of size \(d\), where k denotes the kernel width e.g. the size of the sliding window and d is the embedding dimension. As a consequence  prior to applying the kernel the embedded input  is projected to the convolution size d . Lastly the \ac{GLU} transforms the input of size 2d back to the embedding dimension d by splitting the input in half, pushing the second half through a sigmoid function and adding the results point wise with the first half. Moreover, residual connections around each layer are applied.
+
+\noindent To conclude the model architecture we will look at the introduced attention mechanism which the authors called multi-step attention. The attention score is calculated between every decoder state and the last encoder state. In Addition the target embedding are added to the current decoder state prior to computing the attention score. Likewise the source embedding is added to last encoder state,but is instead  used to compute the final context vector. Eventually the context vector is computed as the weighted sum between the  normalized attention score using the softmax function and the concatenated last encoder output as described earlier. This calculation is iteratively done until the last decoder layer is reached as the context vector of the previous layer is added to the input of the next decoder layer.
+Then, in order to predict the next word the top feature map of the last decoder state is transformed using a linear layer and pushed through a softmax function. 
+\section{Implementation}
+Overall the implemented version closely follows the description and the original implementation including the performed initialization of the different layers. 
+However while we did scale the different layers according to the paper we left out scaling the gradients of the encoder output by the number of attention layers since the code was hard to understand. 
+In Addition instead of  implementing a CNN layer nearly from scratch with a custom class we used the the conv1d class from pytorch directly .
+The downside is, that in their implementation they make use of  the general purpose matrix product which they claim in the docstring of the module is faster for smaller kernels.
+The most notably difference is that the original implementation uses incremental inference whereas we use beam search provided by JoeyNMT. 
+\newpage 
+\bibliography{anthology}
+\end{document}
