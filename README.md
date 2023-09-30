@@ -3,7 +3,6 @@ This repo contains my project for the proseminar Introduction to Neuronal Networ
 The goal of this project is to implement the [Convolutional Sequence to Sequence Learning](https://arxiv.org/pdf/1705.03122.pdf) approach porposed by Facebook AI Research in JoeyNMT.
 
 ## installing  
-There are two options 
 ```
 git clone https://github.com/jakob-forstmann/project-intro-to-neuronal-networks.git 
 cd project-intro-to-neuronal-networks
