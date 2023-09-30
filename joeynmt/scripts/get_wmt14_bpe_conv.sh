@@ -104,12 +104,18 @@ tokenize_test_data(){
 }
 
 clean_test_data(){
-        # remove the tag seq with the attribute id at the beginning and the end of each line
-        # convert every ` apostroph to a single apostroph
-        grep '<seg id' $data/test-full/newstest2014-deen-$1.$2.sgm | \
-            sed -e 's/<seg id="[0-9]*">\s*//g' | \
-            sed -e 's/\s*<\/seg>\s*//g' | \
-            sed -e "s/\’/\'/g" | \
+    if [ "$l" == "$src" ]; then
+        t="src"
+    else
+        t="ref"
+    fi
+    # remove the tag seq with the attribute id at the beginning and the end of each line
+    # convert every ` apostroph to a single apostroph
+    grep '<seg id' $data/test-full/newstest2014-deen-$t.$l.sgm | \
+        sed -e 's/<seg id="[0-9]*">\s*//g' | \
+        sed -e 's/\s*<\/seg>\s*//g' | \
+        sed -e "s/\’/\'/g" | \
+        perl $TOKENIZER -threads 8 -a -l $l > $tmp/test.$l
 }
 
 split_datasets_in_train_valid(){
@@ -154,7 +160,8 @@ main(){
     prepare_env
     download_data
     preprocess_train_data
-    preprocess_test_data
+    tokenize_test_data
+    split_datasets_in_train_valid
     apply_bpe
     clean_corpus
     #clean up working dir 
