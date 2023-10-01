@@ -309,9 +309,6 @@ class CNNEncoder(Encoder):
             - output of the last encoder layer with shape (batch x src_len x embed_size)
             -  attention value vector with shape (batch x src_len x embed_size)
         """
-
-        print("CNN ENcoder emb size",self.emb_size)
-        print("CNN forward src_embed size batch x src_len x embed_size",src_embed.shape)
         x = self.pse(src_embed) # add positional encoding
         x = self.emb_dropout(x)
         inital_input = x

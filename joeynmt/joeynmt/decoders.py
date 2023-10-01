@@ -606,10 +606,9 @@ class CNNDecoder(Decoder):
                 layers:dict[str,dict[str,int]],
                 emb_size:int,
                 num_layers:int=1,
-                out_embed_dim:int=256,
+                vocab_size: int = 1,
                 dropout:float = 0.1,
                 emb_dropout:float=0.1,
-                vocab_size: int = 1,
                 **kwargs):
         """
         initialize the CNN Decoder  
@@ -631,8 +630,8 @@ class CNNDecoder(Decoder):
         self.emb_dropout = nn.Dropout(p=emb_dropout)
         last_output_channel = self.convs[-1]["output_channels"]
         self.map_to_conv_dim = weight_norm(nn.Linear(self.emb_size,self.input_size))
-        self.map_to_out_emb_dim = weight_norm(nn.Linear(last_output_channel,out_embed_dim))
-        self.map_to_output_dim = weight_norm(nn.Linear(out_embed_dim,vocab_size))
+        self.map_to_out_emb_dim = weight_norm(nn.Linear(last_output_channel,self.emb_size))
+        self.map_to_output_dim = weight_norm(nn.Linear(self.emb_size,vocab_size))
         self.dropout = dropout
         self._build_layers()
 

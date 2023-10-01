@@ -94,7 +94,6 @@ class Model(nn.Module):
             assert "trg" in kwargs and "trg_mask" in kwargs  # need trg to compute loss
 
             out, _, att_probs, _ = self._encode_decode(**kwargs)
-
             # compute log probs
             log_probs = F.log_softmax(out, dim=-1)
 
@@ -335,7 +334,7 @@ def build_model(cfg: dict = None,
     elif dec_cfg.get("type", "transformer") == "convolutional":
         emd_dim = src_embed.embedding_dim
         enc_emb_dropout = dec_cfg["embeddings"].get("dropout", enc_dropout)
-        decoder = CNNDecoder(**dec_cfg,emb_size=emd_dim)
+        decoder = CNNDecoder(**dec_cfg,emb_size=emd_dim,vocab_size=len(trg_vocab),)
     else:
         decoder = RecurrentDecoder(
             **dec_cfg,
