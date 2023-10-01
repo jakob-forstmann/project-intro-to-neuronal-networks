@@ -7,7 +7,7 @@ from typing import Optional, Tuple
 import torch
 from torch import Tensor, nn
 from torch.nn.utils import weight_norm
-
+from math import sqrt
 
 from joeynmt.attention import BahdanauAttention, LuongAttention
 from joeynmt.builders import build_activation
@@ -625,11 +625,11 @@ class CNNDecoder(Decoder):
                 self._use_default_settings()
         self.emb_size = emb_size
         self.conv_layers= nn.ModuleList([])
-        self.input_size = self.convs[0]["output_channels"]
+        self.in_channels_first_layer = self.convs[0]["output_channels"]
         self.pse = PositionalEncoding(self.emb_size)
         self.emb_dropout = nn.Dropout(p=emb_dropout)
         last_output_channel = self.convs[-1]["output_channels"]
-        self.map_to_conv_dim = weight_norm(nn.Linear(self.emb_size,self.input_size))
+        self.map_to_conv_dim = weight_norm(nn.Linear(self.emb_size,self.in_channels_first_layer))
         self.map_to_out_emb_dim = weight_norm(nn.Linear(last_output_channel,self.emb_size))
         self.map_to_output_dim = weight_norm(nn.Linear(self.emb_size,vocab_size))
         self.dropout = dropout
@@ -672,13 +672,15 @@ class CNNDecoder(Decoder):
         return out,x,att_score,None
 
     def _build_layers(self):       
+        in_channels = self.in_channels_first_layer
         for conv in self.convs:
-            self.conv_layers.append(CNNDecoderLayer(
-                                    self.emb_size,self.input_size,
-                                    conv["output_channels"],
-                                    conv["kernel_width"],
-                                    conv["residual"],
-                                    dropout=self.dropout))
+            self.conv_layers.append(CNNDecoderLayer(self.emb_size,
+                                                    in_channels,
+                                                    conv["output_channels"],
+                                                    conv["kernel_width"],
+                                                    conv["residual"],
+                                                    self.dropout))
+            in_channels = conv["output_channels"]
 
     def _use_default_settings(self):
         """ fills convs with values up to num_layers with the standard values 
@@ -686,3 +688,22 @@ class CNNDecoder(Decoder):
         self.convs = self.convs + [ {"output_channels":512,"kernel_width":3,"residual":True} 
                      for i in range((len(self.layers)),self.num_layers)]
 
+    def init_layers_(self):
+        """ computes the init weights for the different layers
+        They are added to encoder config dict so that they can be used as values 
+        for the available probability distribution in initialization.py"""
+        std_first_linear_layer = sqrt((1 - self.dropout) / self.in_channels_first_layer)
+        std_last_linear_layer = sqrt((1 - self.dropout) / self.out_channel_last_layer)
+        in_channels = self.in_channels_first_layer
+        conv_inits = []
+        for conv_layer in self.convs:
+            std = sqrt((4 * (1.0 - self.dropout)) / (conv_layer["kernel_width"] * in_channels))
+            conv_inits.append(std)
+            in_channels = conv_layer["output_channels"]
+
+        self.cfg["conv_layer_init"] = conv_inits
+        self.cfg["first_linear_layer"] = std_first_linear_layer
+        self.cfg["last_linear_layer"]  = std_last_linear_layer
+
+    def get_layer_init_values(self):
+        return self.cfg

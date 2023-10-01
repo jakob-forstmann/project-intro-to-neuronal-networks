@@ -7,8 +7,6 @@ from joeynmt.attention import ConvolutionalAttention
 
 from math import sqrt
 
-"""CNN Encoder and Decoder Layer"""
-
 class CNNEncoderLayer(nn.Module):
     """ implements the one CNN layer consisting of a 1DConv
     followed by a GLU and if specified residual connections
