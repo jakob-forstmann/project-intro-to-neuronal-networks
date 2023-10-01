@@ -157,6 +157,11 @@ clean_corpus(){
 }
 
 main(){
+    if [ "$1" == "--short" ]; then
+    URLS=("http://statmt.org/wmt13/training-parallel-europarl-v7.tgz")
+    FILES=("training-parallel-europarl-v7.tgz")
+    CORPORA=("training/europarl-v7.de-en")
+    fi
     prepare_env
     download_data
     preprocess_train_data
