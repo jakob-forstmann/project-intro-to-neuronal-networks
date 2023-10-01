@@ -7,7 +7,9 @@ from math import sqrt
 class TestCNNEncoderLayer(unittest.TestCase):
     def setUp(self):
         self.emb_size =512
-        torch.manual_seed(42)
+        self.batch_size = 10
+        self.src_length = 12
+        self.seq_length= torch.Tensor([self.src_length] * self.batch_size).int()
 
     def get_encoder(self,
                     emb_size = 512,
@@ -43,12 +45,12 @@ class TestCNNEncoderLayer(unittest.TestCase):
         # output shape batch x output_channels x trgt_len
         # output channels: first two layer: 128+2*2-(5-1)-1+1 = 128 last three layers: 128+2-(3-1)+1-1 = 128
         # taken from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-        expected_output_shape = torch.Size([10,128,512])
+        expected_output_shape = torch.Size([self.batch_size,self.src_length,self.emb_size])
 
         encoder = self.get_encoder(convolutions=convolutions)
         # batch size x src_length x emb_size
-        test_input = torch.randn(10,128,self.emb_size)
-        last_encoder_output,_ = encoder(test_input)
+        test_input = torch.randn(self.batch_size,self.src_length,self.emb_size)
+        last_encoder_output,_ = encoder(test_input,self.seq_length)
         assert last_encoder_output.shape == expected_output_shape
         self.assertFalse(torch.any(torch.eq(test_input,last_encoder_output)))
 
@@ -57,10 +59,11 @@ class TestCNNEncoderLayer(unittest.TestCase):
                         "layer 2": {"output_channels":768,"kernel_width":5,"residual":True},
                         "layer 3": {"output_channels":512,"kernel_width":5,"residual":True}}
 
-        expected_output_shape = torch.Size([10,128,512])
+        expected_output_shape = torch.Size([self.batch_size,self.src_length,self.emb_size])
         encoder = self.get_encoder(num_layers=3,convolutions=convolutions)
-        test_input = torch.randn(10,128,self.emb_size)
-        last_encoder_output,_ = encoder(test_input)
+        test_input = torch.randn(self.batch_size,self.src_length,self.emb_size)
+
+        last_encoder_output,_ = encoder(test_input,self.seq_length)
         assert last_encoder_output.shape == expected_output_shape
         self.assertFalse(torch.any(torch.eq(test_input,last_encoder_output)))
 
