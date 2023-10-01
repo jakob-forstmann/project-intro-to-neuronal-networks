@@ -1,24 +1,37 @@
-name: "convolutional Seq2Seq"
+ame: "convolutional Seq2Seq"
 joeynmt_version: "2.0.0"
 
 data:
-    # generate data with scripts/generate_reverse_task.py
-    train: "test/data/reverse/train"
-    dev: "test/data/reverse/dev"
-    test: "test/data/reverse/test"
+    train: "test/data/wmt14/train"
+    dev: "test/data/wmt14/dev"
+    test: "test/data/wmt14/test"
     dataset_type: "plain"
     src:
-        lang: "src"
-        max_length: 25
-        level: "word"
-        voc_limit: 100
-        voc_min_freq: 0
+        lang: "de"
+        max_length: 62
+        lowercase: True
+        normalize: False
+        level: "bpe"
+        voc_min_freq: 1
+        voc_file: "test/data/wmt14/bpe_vocab.txt"
+        tokenizer_type: "subword-nmt"
+        tokenizer_cfg:
+            num_merges: 4000
+            codes: "test/data/wmt14/bpe.4000"
+            pretokenizer: "none"
     trg:
-        lang: "trg"
-        max_length: 25
-        level: "word"
-        voc_limit: 100
-        voc_min_freq: 0
+        lang: "en"
+        max_length: 62
+        lowercase: True
+        normalize: False
+        level: "bpe"
+        voc_min_freq: 1
+        voc_file: "test/data/iwslt14/bpe_vocab.txt"
+        tokenizer_type: "subword-nmt"
+        tokenizer_cfg:
+            num_merges: 4000
+            codes: "test/data/iwslt14/bpe.4000"
+            pretokenizer: "none"
 
 testing:
     n_best: 1
@@ -48,7 +61,7 @@ training:
     epochs: 1
     validation_freq: 1000
     logging_freq: 100
-    model_dir: "reverse_transformer"
+    model_dir: "wmt14_conv"
     overwrite: True
     shuffle: True
     use_cuda: False
@@ -69,13 +82,14 @@ model:
           kernel_width: 3 
           residual: True
       layer 2:
-          output_channels: 287
+          output_size: 287
           kernel_width: 3 
           residual: True
-    num_layers: 5
+    num_layers: 5 # other three layer use the default values: 512 output_channnel,kernel_width:3, residual:True
     dropout: 0.1
     embeddings:
-            embedding_dim: 64
+            embedding_dim: 64       
+            scale: True    
   decoder:
     type: "convolutional"
     layers: 
@@ -90,4 +104,5 @@ model:
     num_layers: 5
     dropout: 0.1
     embeddings:
-            embedding_dim: 64
+          embedding_dim: 64       
+          scale: True  
